@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Melodistiq",
+  "description": "An AI-powered songwriting assistant to help you generate lyrics, chords, and MIDI files. Built with React and the Gemini API.",
+  "requestFramePermissions": []
+}
