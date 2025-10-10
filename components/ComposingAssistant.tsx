@@ -8,22 +8,22 @@ import { generateChordMidi, generateTuneMidi, generateSampleMidi } from '../util
 import { getMoodCategory } from '../utils/mood';
 
 const SettingsDropdown: React.FC<{
-  label: string;
-  value: string | number;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  options: { value: string | number; label: string }[];
+    label: string;
+    value: string | number;
+    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+    options: { value: string | number; label: string }[];
 }> = ({ label, value, onChange, options }) => (
     <div className="flex-1 min-w-[120px]">
-      <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
-      <select
-        value={value}
-        onChange={onChange}
-        className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
-      >
-        {options.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
+        <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+        <select
+            value={value}
+            onChange={onChange}
+            className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+        >
+            {options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+        </select>
     </div>
 );
 
@@ -55,7 +55,7 @@ const ComposingAssistant: React.FC = () => {
         chordComplexity: 'any',
         barsPerLine: 'any',
     });
-    
+
     const handleSettingsChange = useCallback(<K extends keyof SongSettings,>(field: K, value: SongSettings[K]) => {
         setSongSettings(prev => ({ ...prev, [field]: value }));
     }, []);
@@ -82,7 +82,7 @@ const ComposingAssistant: React.FC = () => {
         setGeneratedChords(result);
         setIsLoadingChords(false);
     }, [lyrics, songSettings]);
-    
+
     const { scale, chords, bpm, mood, genre } = useMemo(() => {
         if (!generatedChords) return { scale: '', chords: '', bpm: null, mood: '', genre: '' };
         const lines = generatedChords.split('\n');
@@ -94,9 +94,9 @@ const ComposingAssistant: React.FC = () => {
         const bpmValue = bpmLine ? parseInt(bpmLine.split(':')[1]?.trim()) : null;
         const moodValue = moodLine ? moodLine.split(':')[1]?.trim() : '';
         const genreValue = genreLine ? genreLine.split(':')[1]?.trim() : '';
-        
-        const chordLines = lines.filter(line => 
-            !line.toLowerCase().startsWith('scale:') && 
+
+        const chordLines = lines.filter(line =>
+            !line.toLowerCase().startsWith('scale:') &&
             !line.toLowerCase().startsWith('bpm:') &&
             !line.toLowerCase().startsWith('mood:') &&
             !line.toLowerCase().startsWith('genre:')
@@ -119,7 +119,7 @@ const ComposingAssistant: React.FC = () => {
     const moodCategory = getMoodCategory(mood);
 
     const handleDownloadChordMidi = useCallback(() => {
-        if(!generatedChords) return;
+        if (!generatedChords) return;
         const midiBlob = generateChordMidi(chords);
         const url = URL.createObjectURL(midiBlob);
         const a = document.createElement('a');
@@ -132,7 +132,7 @@ const ComposingAssistant: React.FC = () => {
     }, [chords, generatedChords]);
 
     const handleDownloadSampleMidi = useCallback(() => {
-        if(!generatedChords || !bpm || !genre || !mood) return;
+        if (!generatedChords || !bpm || !genre || !mood) return;
         const midiBlob = generateSampleMidi(chords, bpm, genre, mood);
         const url = URL.createObjectURL(midiBlob);
         const a = document.createElement('a');
@@ -172,7 +172,7 @@ const ComposingAssistant: React.FC = () => {
 
     const handleDownloadTuneMidi = useCallback(() => {
         if (!tuneMidiData || !bpm) return;
-         const midiBlob = generateTuneMidi(tuneMidiData, bpm);
+        const midiBlob = generateTuneMidi(tuneMidiData, bpm);
         const url = URL.createObjectURL(midiBlob);
         const a = document.createElement('a');
         a.href = url;
@@ -188,7 +188,7 @@ const ComposingAssistant: React.FC = () => {
 
     return (
         <>
-            <GenerateLyricsModal 
+            <GenerateLyricsModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 onGenerate={handleGenerateLyrics}
@@ -198,8 +198,8 @@ const ComposingAssistant: React.FC = () => {
             <div className="max-w-7xl mx-auto flex flex-col gap-6 animate-slide-up">
                 {/* Lyrics */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 flex flex-col">
-                     <h2 className="text-2xl font-bold mb-4 text-slate-800 dark:text-white">Lyrics</h2>
-                     <textarea
+                    <h2 className="text-2xl font-bold mb-4 text-slate-800 dark:text-white">Lyrics</h2>
+                    <textarea
                         value={lyrics}
                         onChange={(e) => {
                             setLyrics(e.target.value);
@@ -209,7 +209,7 @@ const ComposingAssistant: React.FC = () => {
                         className="flex-grow w-full p-4 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-md focus:ring-2 focus:ring-cyan-500 focus:outline-none resize-y text-base"
                         style={{ minHeight: '300px' }}
                     />
-                     <button
+                    <button
                         onClick={() => setIsModalOpen(true)}
                         className="mt-4 w-full bg-cyan-600 text-white font-bold py-3 px-5 rounded-md hover:bg-cyan-700 transition-transform duration-200 hover:scale-105"
                     >
@@ -230,23 +230,23 @@ const ComposingAssistant: React.FC = () => {
                         <div className="p-4 border-t border-slate-200 dark:border-slate-700 space-y-4 animate-fade-in">
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <SettingsDropdown label="Genre" value={songSettings.genre} onChange={e => handleSettingsChange('genre', e.target.value)} options={[
-                                    {value: 'any', label: 'Any'}, {value: 'pop', label: 'Pop'}, {value: 'rock', label: 'Rock'}, {value: 'jazz', label: 'Jazz'}, {value: 'blues', label: 'Blues'}
+                                    { value: 'any', label: 'Any' }, { value: 'pop', label: 'Pop' }, { value: 'rock', label: 'Rock' }, { value: 'jazz', label: 'Jazz' }, { value: 'blues', label: 'Blues' }
                                 ]} />
                                 <SettingsDropdown label="Key" value={songSettings.key} onChange={e => handleSettingsChange('key', e.target.value)} options={[
-                                    {value: 'any', label: 'Any'}, {value: 'major', label: 'Major'}, {value: 'minor', label: 'Minor'}
+                                    { value: 'any', label: 'Any' }, { value: 'major', label: 'Major' }, { value: 'minor', label: 'Minor' }
                                 ]} />
                                 <SettingsDropdown label="Mood" value={songSettings.mood} onChange={e => handleSettingsChange('mood', e.target.value)} options={[
-                                    {value: 'any', label: 'Any (detect from lyrics)'}, {value: 'happy', label: 'Happy'}, {value: 'sad', label: 'Sad'}, {value: 'romantic', label: 'Romantic'}, {value: 'motivational', label: 'Motivational'}, {value: 'energetic', label: 'Energetic'}, {value: 'disgust', label: 'Disgust'}
+                                    { value: 'any', label: 'Any (detect from lyrics)' }, { value: 'happy', label: 'Happy' }, { value: 'sad', label: 'Sad' }, { value: 'romantic', label: 'Romantic' }, { value: 'motivational', label: 'Motivational' }, { value: 'energetic', label: 'Energetic' }, { value: 'disgust', label: 'Disgust' }
                                 ]} />
                                 <div className="flex-1 min-w-[120px]">
                                     <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">BPM</label>
                                     <input type="text" value={songSettings.bpm} onChange={e => handleSettingsChange('bpm', e.target.value)} placeholder="e.g., 120 or 'any'" className="w-full bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-md p-2 focus:ring-2 focus:ring-cyan-500 focus:outline-none" />
                                 </div>
                                 <SettingsDropdown label="Chord Complexity" value={songSettings.chordComplexity} onChange={e => handleSettingsChange('chordComplexity', e.target.value)} options={[
-                                    {value: 'any', label: 'Any (from mood)'}, {value: 'easy', label: 'Easy'}, {value: 'medium', label: 'Medium'}, {value: 'complex', label: 'Complex'}, {value: 'randomize', label: 'Randomize'}
+                                    { value: 'any', label: 'Any (from mood)' }, { value: 'easy', label: 'Easy' }, { value: 'medium', label: 'Medium' }, { value: 'complex', label: 'Complex' }, { value: 'randomize', label: 'Randomize' }
                                 ]} />
                                 <SettingsDropdown label="Bars Per Line" value={songSettings.barsPerLine} onChange={e => handleSettingsChange('barsPerLine', e.target.value)} options={[
-                                    {value: 'any', label: 'Any (default)'}, {value: '1', label: '1'}, {value: '2', label: '2'}, {value: '3', label: '3'}, {value: '4', label: '4'},
+                                    { value: 'any', label: 'Any (default)' }, { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
                                 ]} />
                             </div>
                             <div>
@@ -264,7 +264,7 @@ const ComposingAssistant: React.FC = () => {
 
                 {/* Chords Card */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 space-y-4">
-                     <button 
+                    <button
                         onClick={handleGenerateChords}
                         disabled={isChordGenerationDisabled}
                         className="w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-md hover:bg-purple-700 transition-transform duration-200 hover:scale-105 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed disabled:scale-100 flex items-center justify-center"
@@ -274,7 +274,7 @@ const ComposingAssistant: React.FC = () => {
                                 <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                 Generating Chords...
                             </>
-                            ) : (
+                        ) : (
                             'Generate Chords'
                         )}
                     </button>
@@ -299,15 +299,15 @@ const ComposingAssistant: React.FC = () => {
                             placeholder="Your generated chords will appear here..."
                             className="w-full h-52 p-4 bg-transparent focus:outline-none resize-y whitespace-pre-wrap font-mono text-sm"
                         />
-                         <div className="p-3 border-t border-slate-300 dark:border-slate-700 flex flex-col sm:flex-row gap-2">
-                            <button 
+                        <div className="p-3 border-t border-slate-300 dark:border-slate-700 flex flex-col sm:flex-row gap-2">
+                            <button
                                 onClick={handleDownloadChordMidi}
                                 disabled={!generatedChords}
                                 className="flex-1 bg-green-600 text-white font-bold py-2 px-3 rounded-md hover:bg-green-700 transition-colors duration-200 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-sm"
                             >
                                 Download Chords MIDI
                             </button>
-                             <button 
+                            <button
                                 onClick={handleDownloadSampleMidi}
                                 disabled={!generatedChords || !bpm}
                                 className="flex-1 bg-sky-600 text-white font-bold py-2 px-3 rounded-md hover:bg-sky-700 transition-colors duration-200 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-sm"
@@ -321,32 +321,42 @@ const ComposingAssistant: React.FC = () => {
                 {/* Tune Card */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 space-y-4">
                     <div className="flex flex-col sm:flex-row items-center gap-4">
-                       <div className='flex-grow'>
+                        <div className='flex-grow'>
                             <h3 className="text-lg font-semibold text-slate-800 dark:text-white">Tune Generator</h3>
                             <p className="text-sm text-gray-500 dark:text-gray-400">generate a tune for ur song</p>
-                       </div>
-                       <div className='flex w-full sm:w-auto space-x-2'>
-                        <button
-                            onClick={handleGenerateTune}
-                            disabled={isTuneGenerationDisabled}
-                            className="flex-1 bg-teal-600 text-white font-bold py-2 px-4 rounded-md hover:bg-teal-700 transition-colors duration-200 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed flex items-center justify-center text-sm"
-                        >
-                            {isLoadingTune ? (
-                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                            ) : (
-                                'Generate'
-                            )}
-                        </button>
-                        {tuneMidiData && (
+                        </div>
+                        <div className='flex w-full sm:w-auto space-x-2'>
                             <button
-                                onClick={handleDownloadTuneMidi}
-                                className="flex-1 bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition-colors duration-200 text-sm"
+                                onClick={handleGenerateTune}
+                                disabled={isTuneGenerationDisabled}
+                                className="flex-1 bg-teal-600 text-white font-bold py-2 px-4 rounded-md hover:bg-teal-700 transition-colors duration-200 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed flex items-center justify-center text-sm"
                             >
-                                Download
+                                {isLoadingTune ? (
+                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                ) : (
+                                    'Generate'
+                                )}
                             </button>
-                        )}
-                       </div>
+                            {tuneMidiData && (
+                                <button
+                                    onClick={handleDownloadTuneMidi}
+                                    className="flex-1 bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition-colors duration-200 text-sm"
+                                >
+                                    Download
+                                </button>
+                            )}
+                        </div>
                     </div>
+                </div>
+                <div className="mt-2 text-center">
+                    <a
+                        href="https://youtu.be/vgU48JFU-ls"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 underline text-sm hover:text-blue-500 transition-colors duration-200"
+                    >
+                        Let's get you started
+                    </a>
                 </div>
             </div>
         </>
