@@ -196,6 +196,16 @@ const ComposingAssistant: React.FC = () => {
             />
 
             <div className="max-w-7xl mx-auto flex flex-col gap-6 animate-slide-up">
+                <div className="mt-2 text-left">
+                    <a
+                        href="https://youtu.be/vgU48JFU-ls"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 underline text-sm hover:text-blue-500 transition-colors duration-200"
+                    >
+                        Let's get you started
+                    </a>
+                </div>
                 {/* Lyrics */}
                 <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg p-6 flex flex-col">
                     <h2 className="text-2xl font-bold mb-4 text-slate-800 dark:text-white">Lyrics</h2>
@@ -347,16 +357,6 @@ const ComposingAssistant: React.FC = () => {
                             )}
                         </div>
                     </div>
-                </div>
-                <div className="mt-2 text-center">
-                    <a
-                        href="https://youtu.be/vgU48JFU-ls"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-400 underline text-sm hover:text-blue-500 transition-colors duration-200"
-                    >
-                        Let's get you started
-                    </a>
                 </div>
             </div>
         </>
