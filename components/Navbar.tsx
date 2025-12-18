@@ -54,9 +54,9 @@ const Navbar: React.FC<NavbarProps> = ({ activeView, onNavigate }) => {
             <NavItem view={View.COMPOSING_ASSISTANT} activeView={activeView} onClick={onNavigate}>
               Composing Assistant
             </NavItem>
-            {/* <NavItem view={View.CHORD_FINDER} activeView={activeView} onClick={onNavigate}>
+            <NavItem view={View.CHORD_FINDER} activeView={activeView} onClick={onNavigate}>
               Chord Finder
-            </NavItem> */}
+            </NavItem>
             <button
                 onClick={toggleTheme}
                 className="p-2 rounded-full text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
