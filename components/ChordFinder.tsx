@@ -1,28 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { detectChordsFromFile } from '../services/geminiService';
-
-// Helper to convert file to base64
-const fileToBase64 = (file: File): Promise<{ data: string; mimeType: string }> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const result = reader.result as string;
-      const [header, data] = result.split(',');
-      const mimeType = header.match(/:(.*?);/)?.[1] || file.type;
-      resolve({ data, mimeType });
-    };
-    reader.onerror = error => reject(error);
-  });
-};
 
 const ChordFinder: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ scale: string; chords: string } | null>(null);
+  const [result, setResult] = useState<{ type: 'chords' | 'melody'; scale: string; content: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const midiInputRef = useRef<HTMLInputElement>(null);
-  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -32,24 +15,24 @@ const ChordFinder: React.FC = () => {
     setResult(null);
     setError(null);
 
-    try {
-      const { data, mimeType } = await fileToBase64(file);
-      const responseText = await detectChordsFromFile(data, mimeType);
+    const formData = new FormData();
+    formData.append('file', file);
 
-      const lines = responseText.split('\n');
-      const scaleLine = lines.find(line => line.toLowerCase().startsWith('scale:'));
-      const chordsLine = lines.find(line => line.toLowerCase().startsWith('chords:'));
-      
-      if (scaleLine && chordsLine) {
-        setResult({
-          scale: scaleLine.substring('scale:'.length).trim(),
-          chords: chordsLine.substring('chords:'.length).trim(),
-        });
-      } else {
-        throw new Error("Couldn't parse the analysis. The AI returned:\n" + responseText);
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to analyze MIDI file');
       }
+
+      const data = await response.json();
+      setResult(data);
     } catch (e: any) {
-      setError(e.message || 'An error occurred during chord detection.');
+      setError(e.message || 'An error occurred during analysis.');
       console.error(e);
     } finally {
       setIsLoading(false);
@@ -68,7 +51,7 @@ const ChordFinder: React.FC = () => {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <p className="text-lg text-gray-500 dark:text-gray-400">Analyzing your track... this may take a moment.</p>
+          <p className="text-lg text-gray-500 dark:text-gray-400">Analyzing MIDI file... this may take a moment.</p>
         </div>
       );
     }
@@ -78,7 +61,7 @@ const ChordFinder: React.FC = () => {
         <div className="text-center p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 rounded-lg">
           <h3 className="text-xl font-bold text-red-700 dark:text-red-300 mb-2">Analysis Failed</h3>
           <p className="text-red-600 dark:text-red-400 whitespace-pre-wrap">{error}</p>
-           <button
+          <button
             onClick={() => { setError(null); setResult(null); }}
             className="mt-4 bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-700 transition-colors"
           >
@@ -94,15 +77,19 @@ const ChordFinder: React.FC = () => {
           <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">Analysis Complete</h3>
           <div className="space-y-3">
             <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Scale for the song:</p>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Scale:</p>
               <p className="text-lg font-semibold text-cyan-600 dark:text-cyan-400">{result.scale}</p>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Chords of the song:</p>
-              <p className="text-lg font-semibold text-purple-600 dark:text-purple-400">{result.chords}</p>
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                {result.type === 'chords' ? 'Chords:' : 'Notes:'}
+              </p>
+              <pre className="text-lg font-semibold text-purple-600 dark:text-purple-400 whitespace-pre-wrap font-mono">
+                {result.content}
+              </pre>
             </div>
           </div>
-           <button
+          <button
             onClick={() => { setError(null); setResult(null); }}
             className="mt-6 bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-700 transition-colors"
           >
@@ -120,19 +107,19 @@ const ChordFinder: React.FC = () => {
           </svg>
         </div>
         <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Chord Detector</h2>
-        <p className="text-lg text-gray-500 dark:text-gray-400 max-w-md mb-8">Upload a MIDI or audio file and let our AI analyze the chords and scale for you.</p>
+        <p className="text-lg text-gray-500 dark:text-gray-400 max-w-md mb-8">Upload a MIDI file and let our AI analyze the chords and scale for you.</p>
         <div className="flex flex-col sm:flex-row gap-4">
           <input type="file" ref={midiInputRef} onChange={handleFileChange} accept=".mid,.midi" style={{ display: 'none' }} />
-          <input type="file" ref={audioInputRef} onChange={handleFileChange} accept="audio/*" style={{ display: 'none' }} />
           <button
             onClick={() => midiInputRef.current?.click()}
-            className="w-full sm:w-auto bg-purple-600 text-white font-bold py-3 px-6 rounded-md hover:bg-purple-700 transition-transform duration-200 hover:scale-105"
+            className="w-full sm:w-auto bg-purple-600 text-white font-bold py-3 px-6 rounded-md hover:bg-purple-700 transition-transform duration-200 hover:scale-105 shadow-lg"
           >
             Import MIDI
           </button>
           <button
-            onClick={() => audioInputRef.current?.click()}
-            className="w-full sm:w-auto bg-sky-600 text-white font-bold py-3 px-6 rounded-md hover:bg-sky-700 transition-transform duration-200 hover:scale-105"
+            onClick={() => { }}
+            className="w-full sm:w-auto bg-sky-600 text-white font-bold py-3 px-6 rounded-md cursor-not-allowed opacity-50 pointer-events-none"
+            title="Currently unavailable"
           >
             Import Audio Track
           </button>
