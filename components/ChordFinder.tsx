@@ -6,6 +6,7 @@ const ChordFinder: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const midiInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -15,18 +16,23 @@ const ChordFinder: React.FC = () => {
     setResult(null);
     setError(null);
 
+    // Check file extension to determine if it's MIDI or audio
+    const fileName = file.name.toLowerCase();
+    const isMidi = fileName.endsWith('.mid') || fileName.endsWith('.midi');
+    const endpoint = isMidi ? '/api/analyze' : '/api/analyze-audio';
+
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/analyze', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze MIDI file');
+        throw new Error(errorData.error || 'Failed to analyze file');
       }
 
       const data = await response.json();
@@ -51,7 +57,9 @@ const ChordFinder: React.FC = () => {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <p className="text-lg text-gray-500 dark:text-gray-400">Analyzing MIDI file... this may take a moment.</p>
+          <p className="text-lg text-gray-500 dark:text-gray-400">
+            Analyzing track... logic is heavy, so this might take a minute!
+          </p>
         </div>
       );
     }
@@ -107,9 +115,10 @@ const ChordFinder: React.FC = () => {
           </svg>
         </div>
         <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-2">Chord Detector</h2>
-        <p className="text-lg text-gray-500 dark:text-gray-400 max-w-md mb-8">Upload a MIDI file and let our AI analyze the chords and scale for you.</p>
+        <p className="text-lg text-gray-500 dark:text-gray-400 max-w-md mb-8">Upload a MIDI or audio file and let our AI analyze the chords and scale for you.</p>
         <div className="flex flex-col sm:flex-row gap-4">
           <input type="file" ref={midiInputRef} onChange={handleFileChange} accept=".mid,.midi" style={{ display: 'none' }} />
+          <input type="file" ref={audioInputRef} onChange={handleFileChange} accept="audio/*" style={{ display: 'none' }} />
           <button
             onClick={() => midiInputRef.current?.click()}
             className="w-full sm:w-auto bg-purple-600 text-white font-bold py-3 px-6 rounded-md hover:bg-purple-700 transition-transform duration-200 hover:scale-105 shadow-lg"
@@ -117,9 +126,8 @@ const ChordFinder: React.FC = () => {
             Import MIDI
           </button>
           <button
-            onClick={() => { }}
-            className="w-full sm:w-auto bg-sky-600 text-white font-bold py-3 px-6 rounded-md cursor-not-allowed opacity-50 pointer-events-none"
-            title="Currently unavailable"
+            onClick={() => audioInputRef.current?.click()}
+            className="w-full sm:w-auto bg-sky-600 text-white font-bold py-3 px-6 rounded-md hover:bg-sky-700 transition-transform duration-200 hover:scale-105 shadow-lg"
           >
             Import Audio Track
           </button>
