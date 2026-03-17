@@ -1,16 +1,35 @@
-from flask import Flask, request, jsonify
-import music21
+import sys
 import os
-import tempfile
 
+# Stealth Mode: Completely hide TensorFlow from ALL dependencies
+class TFBlocker:
+    def find_spec(self, fullname, path, target=None):
+        if fullname == 'tensorflow' or fullname.startswith('tensorflow.'):
+            raise ImportError("TensorFlow is intentionally disabled for Python 3.13 (macOS) compatibility.")
+        return None
+
+sys.meta_path.insert(0, TFBlocker())
+
+# Pre-emptively clear any existing halted state
+if 'tensorflow' in sys.modules:
+    del sys.modules['tensorflow']
+
+from flask import Flask, request, jsonify, send_from_directory
+import music21
+import tempfile
+import traceback
+
+# Import audio_processor with better error reporting
 try:
+    # Try local import first (when running python3 api/index.py)
+    if os.path.dirname(__file__) not in sys.path:
+        sys.path.append(os.path.dirname(__file__))
     import audio_processor
-except ImportError:
-    try:
-        from api import audio_processor
-    except ImportError:
-        # Fallback if neither works (shouldn't happen if file exists)
-        audio_processor = None
+    print("Successfully imported audio_processor")
+except Exception as e:
+    print(f"Error importing audio_processor: {e}")
+    traceback.print_exc()
+    audio_processor = None
 
 app = Flask(__name__)
 
@@ -46,9 +65,16 @@ def analyze_audio():
         
         # 2. Process MIDI -> Chords (Re-using logic)
         print("Analyzing MIDI for chords...")
-        result = analyze_midi_file(midi_path)
+        analysis_response = analyze_midi_file(midi_path)
+        
+        # Inject midi_file name into the response for download
+        if analysis_response.is_json:
+            data = analysis_response.get_json()
+            data['midi_file'] = os.path.basename(midi_path)
+            return jsonify(data)
+            
         print("Chord analysis complete!")
-        return result
+        return analysis_response
 
     except Exception as e:
         import traceback
@@ -59,9 +85,20 @@ def analyze_audio():
         # Cleanup audio
         if os.path.exists(temp_audio_path):
             os.remove(temp_audio_path)
-        # Cleanup MIDI if created and we are done
-        if midi_path and os.path.exists(midi_path):
-             os.remove(midi_path)
+        # Verify if we should cleanup MIDI - NO, keep it for download!
+        # if midi_path and os.path.exists(midi_path):
+        #      os.remove(midi_path)
+
+@app.route('/api/download-midi/<filename>', methods=['GET'])
+def download_midi(filename):
+    try:
+        # Security: sanitize filename
+        filename = os.path.basename(filename)
+        directory = tempfile.gettempdir()
+        return send_from_directory(directory, filename, as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 404
+
 
 def analyze_midi_file(file_path):
     """
@@ -74,8 +111,11 @@ def analyze_midi_file(file_path):
         chord_score = score.chordify()
         
         # Analyze key (scale)
-        key = score.analyze('key')
-        scale_name = f"{key.tonic.name} {key.mode}"
+        try:
+            key = score.analyze('key')
+            scale_name = f"{key.tonic.name} {key.mode}"
+        except Exception:
+            scale_name = "Unknown Scale"
 
         chords_list = []
         is_monophonic = True

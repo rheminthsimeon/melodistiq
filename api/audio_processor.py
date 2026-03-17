@@ -1,44 +1,119 @@
+import sys
 import os
 
-# Force single-threaded execution for TensorFlow/CREPE to avoid Python 3.13 mutex issues
+# Stealth Mode: Completely hide TensorFlow from ALL dependencies
+class TFBlocker:
+    def find_spec(self, fullname, path, target=None):
+        if fullname == 'tensorflow' or fullname.startswith('tensorflow.'):
+            raise ImportError("TensorFlow is intentionally disabled for Python 3.13 (macOS) compatibility.")
+        return None
+
+sys.meta_path.insert(0, TFBlocker())
+
+# Pre-emptively clear any existing halted state
+if 'tensorflow' in sys.modules:
+    del sys.modules['tensorflow']
+
+# Safety environment variables
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['TF_NUM_INTEROP_THREADS'] = '1'
 os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
-os.environ['OMP_NUM_THREADS'] = '1'
-os.environ['MKL_NUM_THREADS'] = '1'
 
-# Force torchaudio to use soundfile backend instead of torchcodec
-# This avoids compatibility issues with FFmpeg versions
-os.environ['TORCHAUDIO_BACKEND'] = 'soundfile'
-os.environ['TORCHAUDIO_INCLUDE_TORCHCODEC'] = '0'
-
-import demucs.separate
-import librosa
-import numpy as np
-from scipy.io import wavfile
 import shutil
-import subprocess
-import shlex
-import sys
-from music21 import converter, midi, stream, note, chord, tempo
+import numpy as np
+import librosa
+import tempfile
+import onnxruntime as ort
+
+import basic_pitch.note_creation as infer
+from music21 import converter, midi, stream, note, chord, tempo, instrument
+
+# Basic Pitch Constants
+AUDIO_SAMPLE_RATE = 22050
+FFT_HOP = 256
+AUDIO_WINDOW_LENGTH = 2
+AUDIO_N_SAMPLES = AUDIO_SAMPLE_RATE * AUDIO_WINDOW_LENGTH - FFT_HOP
+ANNOTATIONS_FPS = AUDIO_SAMPLE_RATE // FFT_HOP
+ONNX_MODEL_PATH = "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/basic_pitch/saved_models/icassp_2022/nmp.onnx"
+
+def predict_onnx(audio_path):
+    """
+    Standalone ONNX inference for Basic Pitch to bypass TensorFlow.
+    """
+    session = ort.InferenceSession(ONNX_MODEL_PATH, providers=["CPUExecutionProvider"])
+    
+    n_overlapping_frames = 30
+    overlap_len = n_overlapping_frames * FFT_HOP
+    hop_size = AUDIO_N_SAMPLES - overlap_len
+
+    output = {"note": [], "onset": [], "contour": []}
+    original_length = 0
+    
+    # Audio loading and windowing logic
+    audio_original, _ = librosa.load(audio_path, sr=AUDIO_SAMPLE_RATE, mono=True)
+    original_length = audio_original.shape[0]
+    audio_original = np.concatenate([np.zeros((int(overlap_len / 2),), dtype=np.float32), audio_original])
+    
+    for i in range(0, audio_original.shape[0], hop_size):
+        window = audio_original[i : i + AUDIO_N_SAMPLES]
+        if len(window) < AUDIO_N_SAMPLES:
+            window = np.pad(window, pad_width=[(0, AUDIO_N_SAMPLES - len(window))])
+        
+        audio_windowed = np.expand_dims(np.expand_dims(window, axis=-1), axis=0)
+        
+        # ONNX inference
+        res = session.run(
+            ["StatefulPartitionedCall:1", "StatefulPartitionedCall:2", "StatefulPartitionedCall:0"],
+            {"serving_default_input_2:0": audio_windowed.astype(np.float32)}
+        )
+        output["note"].append(res[0])
+        output["onset"].append(res[1])
+        output["contour"].append(res[2])
+
+    def unwrap_output(output_list, audio_len, n_olap_frames):
+        concatenated = np.concatenate(output_list)
+        n_olap = int(0.5 * n_olap_frames)
+        if n_olap > 0:
+            concatenated = concatenated[:, n_olap:-n_olap, :]
+        n_output_frames_original = int(np.floor(audio_len * (ANNOTATIONS_FPS / AUDIO_SAMPLE_RATE)))
+        unwrapped = concatenated.reshape(concatenated.shape[0] * concatenated.shape[1], concatenated.shape[2])
+        return unwrapped[:n_output_frames_original, :]
+
+    unwrapped_output = {
+        k: unwrap_output(output[k], original_length, n_overlapping_frames) for k in output
+    }
+
+    # Convert to notes
+    onset_threshold = 0.5
+    frame_threshold = 0.3
+    minimum_note_length = 127.70
+    min_note_len_frames = int(np.round(minimum_note_length / 1000 * (AUDIO_SAMPLE_RATE / FFT_HOP)))
+    
+    midi_data, note_events = infer.model_output_to_notes(
+        unwrapped_output,
+        onset_thresh=onset_threshold,
+        frame_thresh=frame_threshold,
+        min_note_len=min_note_len_frames,
+        melodia_trick=True,
+        midi_tempo=120,
+    )
+    
+    return midi_data, note_events
 
 def process_audio(file_path):
     """
     Full pipeline:
-    1. Separate with Demucs (htdemucs_6s) using Python API
-    2. Analyze stems for polyphony
-    3. Select best stem
-    4. Convert to MIDI with CREPE
-    5. Return path to MIDI file
+    1. Separate with Demucs.
+    2. Calculate scores for Piano, Guitar, Other.
+    3. Select BEST stem based on smart logic.
+    4. Convert ONLY the best stem to MIDI using Basic Pitch (ONNX).
     """
-    
-    # Check for ffmpeg
     if not shutil.which("ffmpeg"):
-        raise Exception("FFmpeg not found. Please install FFmpeg (brew install ffmpeg).")
+        raise Exception("FFmpeg not found. Please install FFmpeg.")
     
     output_dir = os.path.join(os.path.dirname(file_path), "separated")
     os.makedirs(output_dir, exist_ok=True)
     
-    # Use Demucs Python API directly
     import torch
     import torchaudio
     from demucs.pretrained import get_model
@@ -50,189 +125,116 @@ def process_audio(file_path):
     model.eval()
     
     print("Loading audio file...")
-    # Load with soundfile to avoid torchaudio issues
     import soundfile as sf
     audio_data, sr = sf.read(file_path, always_2d=True)
-    
-    # Convert to torch tensor and resample if needed
     wav = torch.from_numpy(audio_data.T).float()
     
-    # Resample to model's sample rate if needed
     if sr != model.samplerate:
-        print(f"Resampling from {sr} to {model.samplerate}...")
         wav = torchaudio.functional.resample(wav, sr, model.samplerate)
         sr = model.samplerate
     
-    # Ensure stereo
-    if wav.shape[0] == 1:
-        wav = wav.repeat(2, 1)
-    elif wav.shape[0] > 2:
-        wav = wav[:2]
+    if wav.shape[0] == 1: wav = wav.repeat(2, 1)
+    elif wav.shape[0] > 2: wav = wav[:2]
     
     print("Separating audio with Demucs...")
     with torch.no_grad():
         sources = apply_model(model, wav.unsqueeze(0), device='cpu')[0]
     
-    # Save separated stems using soundfile
     stem_names = model.sources
     filename_no_ext = os.path.splitext(os.path.basename(file_path))[0]
     stem_dir = os.path.join(output_dir, "htdemucs_6s", filename_no_ext)
     os.makedirs(stem_dir, exist_ok=True)
     
-    print(f"Stems will be saved to: {stem_dir}")
-    print("Saving separated stems...")
     for i, stem_name in enumerate(stem_names):
         stem_path = os.path.join(stem_dir, f"{stem_name}.wav")
         stem_audio = sources[i].cpu().numpy()
         sf.write(stem_path, stem_audio.T, sr)
-        print(f"Saved {stem_name}")
     
-    # 2. Polyphony Analysis
+    print("Calculating polyphony scores...")
     scores = {}
-    
-    for stem in stem_names:
-        if stem == "drums":
-            continue  # Ignore drums as requested
-            
+    for stem in ['piano', 'guitar', 'other']:
         stem_path = os.path.join(stem_dir, f"{stem}.wav")
-        if not os.path.exists(stem_path):
-            continue
+        scores[stem] = calculate_polyphony_score(stem_path) if os.path.exists(stem_path) else 0.0
             
-        score = calculate_polyphony_score(stem_path)
-        scores[stem] = score
-        print(f"Stem {stem} Score: {score}")
-
-    # Select winner
-    if not scores:
-        raise Exception("No melodic stems found")
-        
-    best_stem = max(scores, key=scores.get)
+    avg_score = sum(scores.values()) / len(scores) if scores else 0
+    candidates = ['piano', 'guitar'] if scores['piano'] >= avg_score else ['piano', 'guitar', 'other']
+    best_stem = max(candidates, key=lambda k: scores.get(k, 0))
     print(f"Selected Best Stem: {best_stem}")
     
     best_stem_path = os.path.join(stem_dir, f"{best_stem}.wav")
     
-    # 3. CREPE -> MIDI
+    # Use Basic Pitch (ONNX)
+    full_score = stream.Score()
+    try:
+        midi_data, _ = predict_onnx(best_stem_path)
+        with tempfile.NamedTemporaryFile(suffix='.mid', delete=False) as tmp_midi:
+            tmp_midi_path = tmp_midi.name
+            midi_data.write(tmp_midi_path)
+        
+        try:
+            converted_score = converter.parse(tmp_midi_path)
+            parts = converted_score.getElementsByClass(stream.Part)
+            if len(parts) > 0:
+                part = parts[0]
+                part.id = best_stem
+                part.partName = best_stem.capitalize()
+                full_score.insert(0, part)
+        finally:
+            if os.path.exists(tmp_midi_path): os.remove(tmp_midi_path)
+    except Exception as e:
+        print(f"Basic Pitch (ONNX) failed: {e}. Falling back to Essentia.")
+        part = stem_to_midi_part_essentia(best_stem_path, stem_name=best_stem)
+        if part: full_score.insert(0, part)
+
     midi_path = file_path.replace(os.path.splitext(file_path)[1], ".mid")
-    audio_to_midi(best_stem_path, midi_path)
+    mf = midi.translate.streamToMidiFile(full_score)
+    mf.open(midi_path, 'wb')
+    mf.write()
+    mf.close()
     
-    # Cleanup
-    # shutil.rmtree(output_dir) # Keep for debugging
-    
+    print(f"Final MIDI saved to {midi_path}")
     return midi_path
 
 def calculate_polyphony_score(audio_path):
-    """
-    Calculates polyphony score:
-    Average number of pitches in a stem over time.
-    High score -> More likely to have consistent chords/harmony.
-    """
     try:
-        y, sr = librosa.load(audio_path)
-        
-        # Calculate Chroma Energy (Harmonic Content)
+        y, sr = librosa.load(audio_path, duration=30)
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-        
-        # Thresholding to count "active" pitches per frame
-        # Normalize
         chroma_norm = librosa.util.normalize(chroma)
-        
-        # Count how many bins are above a threshold per frame
-        threshold = 0.6  # Tunable parameter
-        active_pitches_per_frame = np.sum(chroma_norm > threshold, axis=0)
-        
-        # Filter silent frames (energy check)
+        active_pitches = np.sum(chroma_norm > 0.6, axis=0)
         rms = librosa.feature.rms(y=y)[0]
-        silent_mask = rms < 0.01
-        
-        active_pitches_active_frames = active_pitches_per_frame[~silent_mask]
-        
-        if len(active_pitches_active_frames) == 0:
-            return 0
-            
-        avg_polyphony = np.mean(active_pitches_active_frames)
-        
-        # Sustain Factor: Long sustained notes might have lower transient energy but high chroma constancy.
-        # This formula is simple but effective for "how many notes are sounding?"
-        
-        return avg_polyphony
-    except Exception as e:
-        print(f"Error calculating score for {audio_path}: {e}")
-        return 0
+        mask = rms > 0.01
+        return float(np.mean(active_pitches[mask])) if any(mask) else 0.0
+    except: return 0.0
 
-def audio_to_midi(audio_path, output_midi_path):
-    """
-    Uses librosa's pyin algorithm to extract pitch and convert to MIDI.
-    This avoids CREPE's TensorFlow multiprocessing issues on Python 3.13.
-    """
-    print("Loading audio for pitch detection...")
-    y, sr = librosa.load(audio_path, sr=None)
+def stem_to_midi_part_essentia(audio_path, stem_name="Piano"):
+    import essentia.standard as es
+    loader = es.MonoLoader(filename=audio_path)
+    audio = loader()
+    multipitch = es.MultiPitchKlapuri(frameSize=2048, hopSize=128)
+    frequencies = multipitch(audio)
     
-    print("Running pitch detection with librosa pyin...")
-    # Use pyin for pitch tracking - more stable than CREPE on Python 3.13
-    f0, voiced_flag, voiced_probs = librosa.pyin(
-        y,
-        sr=sr,
-        fmin=librosa.note_to_hz('C2'),
-        fmax=librosa.note_to_hz('C7'),
-        frame_length=2048
-    )
+    part = stream.Part()
+    part.id = stem_name
+    part.partName = stem_name.capitalize()
     
-    # Get time stamps
-    hop_length = 512
-    times = librosa.frames_to_time(range(len(f0)), sr=sr, hop_length=hop_length)
+    active_notes = {}
+    frame_time = 128 / 44100
     
-    # Create Music21 Stream
-    from music21 import stream, note
-    s = stream.Stream()
-    
-    curr_note = None
-    curr_start_time = 0
-    
-    # Confidence threshold
-    conf_thresh = 0.5
-    
-    for t, freq, confidence in zip(times, f0, voiced_probs):
-        if confidence > conf_thresh and not np.isnan(freq) and freq > 0:
-            # Convert frequency to MIDI note number
-            midi_num = int(round(librosa.hz_to_midi(freq)))
-            
-            if curr_note is None:
-                # Start new note
-                curr_note = midi_num
-                curr_start_time = t
-            elif curr_note != midi_num:
-                # Note changed - add previous note
-                duration = t - curr_start_time
-                if duration > 0.05:  # Minimum duration
-                    n = note.Note(curr_note)
-                    n.duration.quarterLength = duration * 2  # Rough mapping
-                    s.append(n)
+    for i, frame_freqs in enumerate(frequencies):
+        current_time = i * frame_time
+        frame_midi_notes = {int(round(librosa.hz_to_midi(f))) for f in frame_freqs if f > 20}
+        
+        for note_num in list(active_notes.keys()):
+            if note_num not in frame_midi_notes:
+                start_time = active_notes[note_num]
+                duration = current_time - start_time
+                if duration >= 0.1:
+                    n = note.Note(note_num)
+                    n.quarterLength = duration * 2 
+                    part.insert(start_time * 2, n)
+                del active_notes[note_num]
+        
+        for note_num in frame_midi_notes:
+            if note_num not in active_notes: active_notes[note_num] = current_time
                 
-                curr_note = midi_num
-                curr_start_time = t
-        else:
-            if curr_note is not None:
-                # Note ended
-                duration = t - curr_start_time
-                if duration > 0.05:
-                    n = note.Note(curr_note)
-                    n.duration.quarterLength = duration * 2
-                    s.append(n)
-                curr_note = None
-    
-    # Add final note if exists
-    if curr_note is not None:
-        duration = times[-1] - curr_start_time
-        if duration > 0.05:
-            n = note.Note(curr_note)
-            n.duration.quarterLength = duration * 2
-            s.append(n)
-    
-    # Write to file
-    from music21 import midi
-    mf = midi.translate.streamToMidiFile(s)
-    mf.open(output_midi_path, 'wb')
-    mf.write()
-    mf.close()
-    print(f"MIDI saved to {output_midi_path}")
-
+    return part

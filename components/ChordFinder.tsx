@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 
 const ChordFinder: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ type: 'chords' | 'melody'; scale: string; content: string } | null>(null);
+  const [result, setResult] = useState<{ type: 'chords' | 'melody'; scale: string; content: string; midi_file?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const midiInputRef = useRef<HTMLInputElement>(null);
@@ -99,11 +99,23 @@ const ChordFinder: React.FC = () => {
           </div>
           <button
             onClick={() => { setError(null); setResult(null); }}
-            className="mt-6 bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-700 transition-colors"
+            className="mt-6 bg-cyan-600 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-700 transition-colors w-full"
           >
             Analyze Another Track
           </button>
-        </div>
+
+          {
+            result.midi_file && (
+              <a
+                href={`/api/download-midi/${result.midi_file}`}
+                className="mt-3 block w-full text-center bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition-colors"
+                download
+              >
+                Download Generated MIDI
+              </a>
+            )
+          }
+        </div >
       );
     }
 

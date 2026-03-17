@@ -1,3 +1,8 @@
 flask==3.0.3
 music21==9.1.0
 werkzeug==3.0.3
+essentia
+librosa
+soundfile
+demucs
+basic-pitch
