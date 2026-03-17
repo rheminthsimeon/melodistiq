@@ -57,20 +57,23 @@ def analyze_audio():
         temp_audio_path = temp_file.name
 
     midi_path = None
+    stem_path = None
     try:
         # 1. Process Audio -> MIDI
         print(f"Processing audio file: {file.filename}")
-        midi_path = audio_processor.process_audio(temp_audio_path)
+        midi_path, stem_path = audio_processor.process_audio(temp_audio_path)
         print(f"MIDI created successfully at: {midi_path}")
+        print(f"Stem saved at: {stem_path}")
         
         # 2. Process MIDI -> Chords (Re-using logic)
         print("Analyzing MIDI for chords...")
         analysis_response = analyze_midi_file(midi_path)
         
-        # Inject midi_file name into the response for download
+        # Inject file names into the response for download
         if analysis_response.is_json:
             data = analysis_response.get_json()
             data['midi_file'] = os.path.basename(midi_path)
+            data['stem_file'] = os.path.basename(stem_path)
             return jsonify(data)
             
         print("Chord analysis complete!")
@@ -85,17 +88,23 @@ def analyze_audio():
         # Cleanup audio
         if os.path.exists(temp_audio_path):
             os.remove(temp_audio_path)
-        # Verify if we should cleanup MIDI - NO, keep it for download!
-        # if midi_path and os.path.exists(midi_path):
-        #      os.remove(midi_path)
+        # Note: We keep the stem and MIDI for a while for download!
 
 @app.route('/api/download-midi/<filename>', methods=['GET'])
 def download_midi(filename):
     try:
-        # Security: sanitize filename
         filename = os.path.basename(filename)
         directory = tempfile.gettempdir()
         return send_from_directory(directory, filename, as_attachment=True)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 404
+
+@app.route('/api/download-stem/<filename>', methods=['GET'])
+def download_stem(filename):
+    try:
+        filename = os.path.basename(filename)
+        directory = tempfile.gettempdir()
+        return send_from_directory(directory, filename, as_attachment=True, mimetype="audio/wav")
     except Exception as e:
         return jsonify({"error": str(e)}), 404
 

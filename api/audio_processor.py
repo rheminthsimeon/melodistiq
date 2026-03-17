@@ -150,16 +150,21 @@ def process_audio(file_path):
         stem_audio = sources[i].cpu().numpy()
         sf.write(stem_path, stem_audio.T, sr)
     
-    print("Calculating polyphony scores...")
+    print("Calculating polyphony scores for selection...")
     scores = {}
-    for stem in ['piano', 'guitar', 'other']:
+    # Check only piano and guitar as requested
+    for stem in ['piano', 'guitar']:
         stem_path = os.path.join(stem_dir, f"{stem}.wav")
-        scores[stem] = calculate_polyphony_score(stem_path) if os.path.exists(stem_path) else 0.0
+        scores[stem] = calculate_polyphony_score(stem_path) if os.path.exists(stem_path) else -1.0
             
-    avg_score = sum(scores.values()) / len(scores) if scores else 0
-    candidates = ['piano', 'guitar'] if scores['piano'] >= avg_score else ['piano', 'guitar', 'other']
-    best_stem = max(candidates, key=lambda k: scores.get(k, 0))
-    print(f"Selected Best Stem: {best_stem}")
+    # Simplified logic: compare piano (keys) and guitar, pick the higher one.
+    # If one is missing (-1.0), the other will be higher.
+    if scores['piano'] >= scores['guitar']:
+        best_stem = 'piano'
+    else:
+        best_stem = 'guitar'
+    
+    print(f"Selected Best Stem based on score (Piano: {scores['piano']}, Guitar: {scores['guitar']}): {best_stem}")
     
     best_stem_path = os.path.join(stem_dir, f"{best_stem}.wav")
     
@@ -192,8 +197,13 @@ def process_audio(file_path):
     mf.write()
     mf.close()
     
+    # Also copy the best stem to a predictable temp location for download
+    final_stem_path = file_path.replace(os.path.splitext(file_path)[1], f"_{best_stem}.wav")
+    shutil.copy(best_stem_path, final_stem_path)
+    
     print(f"Final MIDI saved to {midi_path}")
-    return midi_path
+    print(f"Final Stem saved to {final_stem_path}")
+    return midi_path, final_stem_path
 
 def calculate_polyphony_score(audio_path):
     try:

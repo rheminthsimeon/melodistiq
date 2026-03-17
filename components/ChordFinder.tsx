@@ -2,7 +2,13 @@ import React, { useState, useRef } from 'react';
 
 const ChordFinder: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<{ type: 'chords' | 'melody'; scale: string; content: string; midi_file?: string } | null>(null);
+  const [result, setResult] = useState<{ 
+    type: 'chords' | 'melody'; 
+    scale: string; 
+    content: string; 
+    midi_file?: string;
+    stem_file?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const midiInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +121,18 @@ const ChordFinder: React.FC = () => {
               </a>
             )
           }
+
+          {/* {
+            result.stem_file && (
+              <a
+                href={`/api/download-stem/${result.stem_file}`}
+                className="mt-2 block w-full text-center bg-amber-600 text-white font-bold py-2 px-4 rounded-md hover:bg-amber-700 transition-colors"
+                download
+              >
+                Download Selected Stem (WAV)
+              </a>
+            )
+          } */}
         </div >
       );
     }
