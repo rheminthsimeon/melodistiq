@@ -10,6 +10,7 @@ const ChordFinder: React.FC = () => {
     stem_file?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
 
   const midiInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -18,6 +19,7 @@ const ChordFinder: React.FC = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setUploadedFileName(file.name);
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -88,7 +90,12 @@ const ChordFinder: React.FC = () => {
     if (result) {
       return (
         <div className="text-left p-6 bg-slate-100 dark:bg-slate-900/50 rounded-lg w-full max-w-2xl animate-fade-in">
-          <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-4">Analysis Complete</h3>
+          <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-1">Analysis Complete</h3>
+          {uploadedFileName && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 italic">
+              File: {uploadedFileName}
+            </p>
+          )}
           <div className="space-y-3">
             <div>
               <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Scale:</p>
