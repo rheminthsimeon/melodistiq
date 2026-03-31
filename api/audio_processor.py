@@ -102,15 +102,57 @@ def predict_onnx(audio_path):
 
 def process_audio(file_path):
     """
-    Full pipeline:
-    1. Separate with Demucs.
-    2. Calculate scores for Piano, Guitar, Other.
-    3. Select BEST stem based on smart logic.
-    4. Convert ONLY the best stem to MIDI using Basic Pitch (ONNX).
+    Direct Basic Pitch Analysis (Demucs Bypassed for better accuracy)
     """
     if not shutil.which("ffmpeg"):
         raise Exception("FFmpeg not found. Please install FFmpeg.")
     
+    # --- BYPASS MODE: Running Basic Pitch directly on the full file ---
+    # We bypass stem separation because it can introduce artifacts that confuse Basic Pitch.
+    print("DEMUCS BYPASSED: Running Basic Pitch directly on full audio mix...")
+    best_stem = "full_mix"
+    best_stem_path = file_path 
+    
+    # Use Basic Pitch (ONNX)
+    full_score = stream.Score()
+    try:
+        midi_data, _ = predict_onnx(best_stem_path)
+        with tempfile.NamedTemporaryFile(suffix='.mid', delete=False) as tmp_midi:
+            tmp_midi_path = tmp_midi.name
+            midi_data.write(tmp_midi_path)
+        
+        try:
+            converted_score = converter.parse(tmp_midi_path)
+            parts = converted_score.getElementsByClass(stream.Part)
+            if len(parts) > 0:
+                part = parts[0]
+                part.id = best_stem
+                part.partName = "Full Mix"
+                full_score.insert(0, part)
+        finally:
+            if os.path.exists(tmp_midi_path): os.remove(tmp_midi_path)
+    except Exception as e:
+        print(f"Basic Pitch (ONNX) failed: {e}. Falling back to Essentia.")
+        part = stem_to_midi_part_essentia(best_stem_path, stem_name="Full Mix")
+        if part: full_score.insert(0, part)
+
+    midi_path = file_path.replace(os.path.splitext(file_path)[1], ".mid")
+    mf = midi.translate.streamToMidiFile(full_score)
+    mf.open(midi_path, 'wb')
+    mf.write()
+    mf.close()
+    
+    # For the UI "Download Stem" button, we provide the original mix tagged as full_mix
+    final_stem_path = file_path.replace(os.path.splitext(file_path)[1], "_full_mix.wav")
+    shutil.copy(best_stem_path, final_stem_path)
+    
+    print(f"Final MIDI saved to {midi_path}")
+    print(f"Full mix reference saved to {final_stem_path}")
+    return midi_path, final_stem_path
+
+'''
+# PREVIOUS DEMUCS LOGIC (Kept for reference/proof of work)
+def process_audio_old_demucs(file_path):
     output_dir = os.path.join(os.path.dirname(file_path), "separated")
     os.makedirs(output_dir, exist_ok=True)
     
@@ -152,58 +194,18 @@ def process_audio(file_path):
     
     print("Calculating polyphony scores for selection...")
     scores = {}
-    # Check only piano and guitar as requested
     for stem in ['piano', 'guitar']:
         stem_path = os.path.join(stem_dir, f"{stem}.wav")
         scores[stem] = calculate_polyphony_score(stem_path) if os.path.exists(stem_path) else -1.0
             
-    # Simplified logic: compare piano (keys) and guitar, pick the higher one.
-    # If one is missing (-1.0), the other will be higher.
     if scores['piano'] >= scores['guitar']:
         best_stem = 'piano'
     else:
         best_stem = 'guitar'
     
     print(f"Selected Best Stem based on score (Piano: {scores['piano']}, Guitar: {scores['guitar']}): {best_stem}")
-    
     best_stem_path = os.path.join(stem_dir, f"{best_stem}.wav")
-    
-    # Use Basic Pitch (ONNX)
-    full_score = stream.Score()
-    try:
-        midi_data, _ = predict_onnx(best_stem_path)
-        with tempfile.NamedTemporaryFile(suffix='.mid', delete=False) as tmp_midi:
-            tmp_midi_path = tmp_midi.name
-            midi_data.write(tmp_midi_path)
-        
-        try:
-            converted_score = converter.parse(tmp_midi_path)
-            parts = converted_score.getElementsByClass(stream.Part)
-            if len(parts) > 0:
-                part = parts[0]
-                part.id = best_stem
-                part.partName = best_stem.capitalize()
-                full_score.insert(0, part)
-        finally:
-            if os.path.exists(tmp_midi_path): os.remove(tmp_midi_path)
-    except Exception as e:
-        print(f"Basic Pitch (ONNX) failed: {e}. Falling back to Essentia.")
-        part = stem_to_midi_part_essentia(best_stem_path, stem_name=best_stem)
-        if part: full_score.insert(0, part)
-
-    midi_path = file_path.replace(os.path.splitext(file_path)[1], ".mid")
-    mf = midi.translate.streamToMidiFile(full_score)
-    mf.open(midi_path, 'wb')
-    mf.write()
-    mf.close()
-    
-    # Also copy the best stem to a predictable temp location for download
-    final_stem_path = file_path.replace(os.path.splitext(file_path)[1], f"_{best_stem}.wav")
-    shutil.copy(best_stem_path, final_stem_path)
-    
-    print(f"Final MIDI saved to {midi_path}")
-    print(f"Final Stem saved to {final_stem_path}")
-    return midi_path, final_stem_path
+'''
 
 def calculate_polyphony_score(audio_path):
     try:
